@@ -1,11 +1,318 @@
 <!DOCTYPE html>
-<html>
+<html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>Pagina di esempio</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>GymTracker Pro</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Animazione per il check */
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .check-pop { animation: pop 0.3s ease-out; }
+    </style>
 </head>
-<body>
-    <h1>Ciao!</h1>
-    <p>Questa è una pagina HTML molto semplice.</p>
+<body class="bg-slate-100 min-h-screen">
+
+    <div id="app" class="max-w-md mx-auto min-h-screen bg-slate-50 flex flex-col relative shadow-2xl overflow-hidden">
+        <!-- Il contenuto verrà iniettato da JavaScript -->
+    </div>
+
+    <script>
+        // --- STATO DELL'APP ---
+        let state = {
+            workouts: [],
+            currentView: 'home', // 'home', 'create', 'session'
+            activeWorkout: null,
+            completedSets: {} // { workoutId_exId: [true, false] }
+        };
+
+        // --- DATI INIZIALI ---
+        const initialWorkouts = [
+            {
+                id: '1',
+                name: 'Petto & Tricipiti',
+                description: 'Allenamento spinta focalizzato su ipertrofia',
+                exercises: [
+                    { id: 'e1', name: 'Panca Piana Bilanciere', sets: 4, reps: 8, weight: 60 },
+                    { id: 'e2', name: 'Spinte Manubri Inclinata', sets: 3, reps: 10, weight: 22 }
+                ]
+            }
+        ];
+
+        // --- PERSISTENZA DATI ---
+        function loadData() {
+            const saved = localStorage.getItem('gym_tracker_data');
+            if (saved) {
+                state.workouts = JSON.parse(saved);
+            } else {
+                state.workouts = initialWorkouts;
+                saveData();
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem('gym_tracker_data', JSON.stringify(state.workouts));
+        }
+
+        // --- LOGICA DI NAVIGAZIONE E AZIONI ---
+        function navigate(view, workout = null) {
+            state.currentView = view;
+            state.activeWorkout = workout;
+            if (view === 'session' && workout) {
+                // Inizializza i set se non esistono
+                workout.exercises.forEach(ex => {
+                    const key = `${workout.id}_${ex.id}`;
+                    state.completedSets[key] = Array(parseInt(ex.sets)).fill(false);
+                });
+            }
+            render();
+        }
+
+        function deleteWorkout(id) {
+            if (confirm("Sei sicuro di voler eliminare questa scheda?")) {
+                state.workouts = state.workouts.filter(w => w.id !== id);
+                saveData();
+                render();
+            }
+        }
+
+        function toggleSet(workoutId, exId, setIdx) {
+            const key = `${workoutId}_${exId}`;
+            state.completedSets[key][setIdx] = !state.completedSets[key][setIdx];
+            render();
+        }
+
+        // --- COMPONENTI UI ---
+
+        function render() {
+            const app = document.getElementById('app');
+            
+            if (state.currentView === 'home') {
+                app.innerHTML = renderHome();
+            } else if (state.currentView === 'create') {
+                app.innerHTML = renderCreate();
+            } else if (state.currentView === 'session') {
+                app.innerHTML = renderSession();
+            }
+
+            // Re-inizializza icone Lucide dopo ogni render
+            lucide.createIcons();
+        }
+
+        function renderHome() {
+            return `
+                <div class="flex-1 overflow-y-auto pb-24 hide-scrollbar">
+                    <div class="bg-white px-6 pt-12 pb-6 border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+                        <h1 class="text-2xl font-bold text-slate-900">I Miei Allenamenti</h1>
+                        <p class="text-slate-500 text-sm mt-1">Pronto per dare il massimo?</p>
+                    </div>
+
+                    <div class="p-6 space-y-4">
+                        ${state.workouts.length === 0 ? `
+                            <div class="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-300">
+                                <i data-lucide="dumbbell" class="mx-auto text-slate-300 mb-3 w-12 h-12"></i>
+                                <p class="text-slate-500 mb-4">Nessuna scheda presente.</p>
+                                <button onclick="navigate('create')" class="bg-indigo-600 text-white px-6 py-2 rounded-xl font-medium">Crea la prima scheda</button>
+                            </div>
+                        ` : state.workouts.map(w => `
+                            <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+                                <div class="flex justify-between items-start mb-2">
+                                    <h3 class="font-bold text-lg text-slate-900">${w.name}</h3>
+                                    <button onclick="deleteWorkout('${w.id}')" class="text-slate-300 hover:text-red-500 p-1">
+                                        <i data-lucide="trash-2" class="w-5 h-5"></i>
+                                    </button>
+                                </div>
+                                <p class="text-slate-500 text-sm mb-4 line-clamp-2">${w.description || 'Nessuna descrizione'}</p>
+                                <div class="flex items-center text-xs text-slate-500 mb-5">
+                                    <span class="flex items-center bg-slate-100 px-2 py-1 rounded-md">
+                                        <i data-lucide="dumbbell" class="w-3 h-3 mr-1"></i> ${w.exercises.length} esercizi
+                                    </span>
+                                </div>
+                                <button onclick="navigate('session', ${JSON.stringify(w).replace(/"/g, '&quot;')})" 
+                                    class="w-full bg-indigo-600 text-white rounded-xl py-3 font-semibold flex justify-center items-center gap-2">
+                                    <i data-lucide="play" class="w-4 h-4 fill-current"></i> Inizia Allenamento
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                <div class="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 py-3 flex justify-around items-center pb-safe">
+                    <button class="flex flex-col items-center text-indigo-600">
+                        <i data-lucide="home" class="w-6 h-6"></i>
+                        <span class="text-[10px] font-bold mt-1 uppercase">Schede</span>
+                    </button>
+                    <button onclick="navigate('create')" class="flex flex-col items-center text-slate-400">
+                        <i data-lucide="plus" class="w-6 h-6"></i>
+                        <span class="text-[10px] font-bold mt-1 uppercase">Crea</span>
+                    </button>
+                </div>
+            `;
+        }
+
+        function renderCreate() {
+            return `
+                <div class="flex-1 flex flex-col bg-white h-full overflow-hidden">
+                    <div class="px-4 py-4 border-b border-slate-200 flex items-center justify-between">
+                        <button onclick="navigate('home')" class="p-2 text-slate-500"><i data-lucide="chevron-left" class="w-6 h-6"></i></button>
+                        <h2 class="font-bold text-lg">Nuova Scheda</h2>
+                        <button onclick="saveNewWorkout()" class="text-indigo-600 font-bold p-2">SALVA</button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-6 space-y-6 hide-scrollbar">
+                        <div class="space-y-4">
+                            <input id="new-workout-name" type="text" placeholder="Nome Scheda" class="w-full text-xl font-bold border-b-2 border-slate-100 py-2 focus:outline-none focus:border-indigo-500">
+                            <input id="new-workout-desc" type="text" placeholder="Descrizione (opzionale)" class="w-full text-sm border-b border-slate-100 py-1 focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <div id="exercise-list-ui" class="space-y-3">
+                            <!-- Esercizi aggiunti andranno qui -->
+                        </div>
+                        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase mb-3">Aggiungi Esercizio</p>
+                            <input id="ex-name" type="text" placeholder="Nome (es. Squat)" class="w-full mb-3 p-3 rounded-xl border border-slate-200 text-sm">
+                            <div class="flex gap-2">
+                                <input id="ex-sets" type="number" placeholder="Set" class="w-full p-3 rounded-xl border border-slate-200 text-sm text-center">
+                                <input id="ex-reps" type="number" placeholder="Reps" class="w-full p-3 rounded-xl border border-slate-200 text-sm text-center">
+                                <input id="ex-weight" type="number" placeholder="Kg" class="w-full p-3 rounded-xl border border-slate-200 text-sm text-center">
+                            </div>
+                            <button onclick="addExerciseToDraft()" class="w-full mt-3 bg-slate-900 text-white py-3 rounded-xl font-bold text-sm">Aggiungi Esercizio</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        let draftExercises = [];
+        function addExerciseToDraft() {
+            const name = document.getElementById('ex-name').value;
+            const sets = document.getElementById('ex-sets').value || 3;
+            const reps = document.getElementById('ex-reps').value || 10;
+            const weight = document.getElementById('ex-weight').value || 0;
+            if(!name) return;
+            
+            draftExercises.push({ id: Date.now().toString(), name, sets, reps, weight });
+            document.getElementById('ex-name').value = '';
+            updateExerciseListUI();
+        }
+
+        function updateExerciseListUI() {
+            const container = document.getElementById('exercise-list-ui');
+            if(!container) return;
+            container.innerHTML = draftExercises.map((ex, i) => `
+                <div class="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                    <div>
+                        <p class="font-bold text-sm">${i+1}. ${ex.name}</p>
+                        <p class="text-[10px] text-slate-500">${ex.sets}x${ex.reps} - ${ex.weight}kg</p>
+                    </div>
+                    <button onclick="draftExercises.splice(${i},1); updateExerciseListUI();" class="text-red-400"><i data-lucide="x" class="w-4 h-4"></i></button>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function saveNewWorkout() {
+            const name = document.getElementById('new-workout-name').value;
+            const desc = document.getElementById('new-workout-desc').value;
+            if(!name) return alert("Dai un nome alla scheda!");
+            
+            state.workouts.push({
+                id: Date.now().toString(),
+                name,
+                description: desc,
+                exercises: [...draftExercises]
+            });
+            draftExercises = [];
+            saveData();
+            navigate('home');
+        }
+
+        function renderSession() {
+            const w = state.activeWorkout;
+            // Calcolo progresso
+            let total = 0;
+            let done = 0;
+            w.exercises.forEach(ex => {
+                const key = `${w.id}_${ex.id}`;
+                const sets = state.completedSets[key] || [];
+                total += sets.length;
+                done += sets.filter(Boolean).length;
+            });
+            const perc = total === 0 ? 0 : Math.round((done/total)*100);
+
+            return `
+                <div class="flex-1 flex flex-col bg-slate-900 h-full text-white overflow-hidden">
+                    <div class="bg-slate-800 px-6 pt-12 pb-6 sticky top-0 z-10 border-b border-slate-700">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="font-bold text-xl">${w.name}</h2>
+                            <button onclick="navigate('home')" class="text-slate-400"><i data-lucide="x" class="w-6 h-6"></i></button>
+                        </div>
+                        <div class="flex justify-between text-[10px] font-bold uppercase text-indigo-400 mb-1">
+                            <span>Progresso Allenamento</span>
+                            <span>${perc}%</span>
+                        </div>
+                        <div class="h-1.5 w-full bg-slate-700 rounded-full overflow-hidden">
+                            <div class="h-full bg-indigo-500 transition-all" style="width: ${perc}%"></div>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto p-4 space-y-6 pb-32 hide-scrollbar">
+                        ${w.exercises.map((ex, i) => {
+                            const key = `${w.id}_${ex.id}`;
+                            const sets = state.completedSets[key] || [];
+                            return `
+                                <div class="bg-slate-800 rounded-2xl p-5 border border-slate-700 shadow-xl">
+                                    <h3 class="font-bold text-lg mb-4 text-indigo-300">${i+1}. ${ex.name}</h3>
+                                    <div class="space-y-2">
+                                        <div class="flex text-[10px] font-bold text-slate-500 uppercase px-2 mb-1">
+                                            <div class="w-10 text-center">Set</div>
+                                            <div class="flex-1 text-center">Kg</div>
+                                            <div class="flex-1 text-center">Reps</div>
+                                            <div class="w-10"></div>
+                                        </div>
+                                        ${sets.map((isDone, sIdx) => `
+                                            <div onclick="toggleSet('${w.id}', '${ex.id}', ${sIdx})" 
+                                                class="flex items-center p-2 rounded-xl border transition-all ${isDone ? 'bg-indigo-900/40 border-indigo-500/50' : 'bg-slate-700/30 border-transparent'}">
+                                                <div class="w-10 text-center text-xs font-bold text-slate-500">${sIdx+1}</div>
+                                                <div class="flex-1 text-center font-bold ${isDone ? 'text-indigo-200' : ''}">${ex.weight}</div>
+                                                <div class="flex-1 text-center font-bold ${isDone ? 'text-indigo-200' : ''}">${ex.reps}</div>
+                                                <div class="w-10 flex justify-center">
+                                                    <div class="w-7 h-7 rounded-lg flex items-center justify-center ${isDone ? 'bg-indigo-500 text-white check-pop' : 'bg-slate-600 text-slate-400'}">
+                                                        <i data-lucide="check" class="w-4 h-4"></i>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+
+                    <div class="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-slate-900 via-slate-900 to-transparent">
+                        <button onclick="navigate('home')" class="w-full bg-emerald-500 text-slate-950 py-4 rounded-2xl font-bold text-lg flex justify-center items-center gap-2 shadow-lg">
+                            <i data-lucide="check-circle" class="w-6 h-6"></i> Termina Allenamento
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- AVVIO ---
+        window.onload = () => {
+            loadData();
+            render();
+        };
+    </script>
 </body>
 </html>
